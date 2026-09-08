@@ -1,0 +1,92 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    // "instructions": [
+    //     "wsl_context.md"
+    // ],
+    "lsp": {
+        "clangd": {
+            "command": [
+                "/mnt/c/msys64/ucrt64/bin/clangd.exe", // WSL环境下的clangd目录
+                "--path-mappings=/mnt/c=C:/,/mnt/d=D:/" // 去掉WSL目录的挂载头映射为Windows目录
+            ],
+            "env": {
+                "PATH": "/mnt/c/msys64/ucrt64/bin", // 考虑将其转移到启动设置当中
+            },
+        },
+        "typescript": {
+            // 与clangd同理：WSL内显式指定命令，不依赖nvm是否加载
+            // tsserver 用全局 TS 5.9.3 兜底（经 initializationOptions），不依赖项目本地是否安装 typescript
+            "command": [
+                "/home/OwlCat/.nvm/versions/node/v24.16.0/bin/node",
+                "/home/OwlCat/.nvm/versions/node/v24.16.0/lib/node_modules/typescript-language-server/lib/cli.mjs",
+                "--stdio"
+            ],
+            "env": {
+                "PATH": "/home/OwlCat/.nvm/versions/node/v24.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            },
+            "initialization": {
+                "tsserver": {
+                    "path": "/home/OwlCat/.nvm/versions/node/v24.16.0/lib/node_modules/typescript/lib/tsserver.js"
+                }
+            },
+        },
+    },
+    "formatter": true,
+    "compaction": {
+        "auto": true,
+        "prune": true, // 压缩时删掉工具调用历史（默认关闭？不理解）
+        "reserved": 256000  // 提前压缩，避免成本超标，注意与模型上下文窗口匹配
+    },
+    "permission": {
+        "lsp": "allow", // 需要配置环境变量`OPENCODE_EXPERIMENTAL=true`
+        "patch": "deny",
+        "question": "deny",     // 经验证是一个没有意义甚至有副作用的工具
+        "todowrite": "deny"
+    },
+    "agent": {
+        "director": { // 最优的方法仍然是让director能够管理上下文，直接将上下文发给actor，而不是让actor从0上下文开始修改
+            "disable": true,
+            "model": "opencode-go/qwen3.8-flash",
+            "mode": "primary",
+        },
+        "actor": {
+            "disable": true,
+            "model": "opencode-go/qwen3.8-flash",
+            "mode": "subagent",
+        },
+        "brainstorm": {
+            "model": "opencode-go/qwen3.8-flash",
+            // "temperature": 0.3,     // 在agent文件中直接指定
+        },
+        "plan": {
+            "prompt": "{file:./default_plus.txt}",     //  覆盖掉原生提示词
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "build": {
+            "prompt": "{file:./default_plus.txt}",    // 同上
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "general": {
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "explore": {
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "compaction": {
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "title": {
+            "model": "opencode-go/qwen3.8-flash",
+        },
+        "summary": {
+            "model": "opencode-go/qwen3.8-flash",
+        }
+    },
+    "mcp": {
+        "vscode": {
+            "type": "remote",
+            "url": "http://127.0.0.1:4369/mcp",     // 注意wsl-windows互访问
+            "enabled": true
+        }
+    }
+}
