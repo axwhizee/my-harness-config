@@ -3,7 +3,7 @@ name: adapt-drv
 description: 面向嵌入式的模块驱动库分层设计规范。当需要为新的外设模块（LCD、传感器等）设计驱动库时使用
 metadata:
   author: Axwhizee
-  version: 7.6
+  version: 8.4
 ---
 
 # 抽象驱动与可适配可移植方法 (Abstraction Driver with Adaptable Portable Technique)
@@ -14,8 +14,8 @@ metadata:
 
 ### 软硬分离
 
-- **核心层(Core)**：实现协议逻辑、算法、资源等应用逻辑。不得直接包含平台相关的 HAL/LL 头文件，所有平台相关操作通过移植层抽象
-- **移植层(Portable)**：实现通信传输、引脚控制等工具接口。是唯一包含平台头文件的部分
+- **核心层(Core)**：实现协议逻辑、算法、资源等应用逻辑。不得直接包含平台相关 HAL，所有平台相关操作通过移植层抽象
+- **移植层(Portable)**：实现通信、定时、引脚控制等的移植接口。是唯一包含平台头文件的部分
 
 ### 调用简单
 
@@ -23,11 +23,11 @@ metadata:
 
 ### 依赖清晰
 
-依赖顺序：应用层（用户代码） -> 核心层（APIs + 辅助工具） -> 移植层 -> 平台驱动。避免反向依赖
+依赖顺序：应用层（用户代码） -> 核心层（API + 内部工具） -> 移植层 -> 平台 HAL。避免反向依赖
 
 ### 快速移植
 
-移植不同平台时，只需实现 `port/xxx_port.h` 中声明的所有接口函数，根据目标平台调整相关宏定义，并修改 `xxx_config.h` 中的参数即可
+移植不同平台时，只需实现 `port/xxx_port.h` 中声明的所有接口函数，根据目标平台调整相关宏定义，并按需修改 `xxx_config.h` 中的参数即可
 
 ### 规范化
 
@@ -51,7 +51,8 @@ xxx_Driver/
 │   ├── xxx_utils.h(.c)   // 辅助 API 的实现，避免 xxx.c 过于臃肿
 │   └── ...
 ├── port/                 // 移植层，唯一包含平台 HAL 的部分
-│   ├── xxx_port.h(.c)    // 移植时只需实现其中的内容
+│   ├── xxx_port.h        // 声明需要移植的对内 API
+│   ├── xxx_port_xxx.h    // 不同平台的移植案例
 │   └── ...
 ├── xxx_config.h          // 驱动库公共配置，如宏开关、参数范围、编码公式
 ├── xxx_types.h           // 公共类型定义，如错误码、句柄
@@ -69,10 +70,9 @@ xxx_Driver/
 // xxx_config.h
 #pragma once
 
-#define xxx_UART_BAUD   115200
 #define xxx_CMD_HEAD    0xFF  // 需要注释配置说明
 #define xxx_TIMEOUT_MS  1000
-#define xxx_RTOS_ADPT   1     // 控制是否启动RTOS适配
+#define xxx_USE_RTOS    1   // RTOS 代码开关
 // ...
 ```
 
@@ -104,20 +104,20 @@ typedef enum {
 typedef enum {
     xxx_STATE_UNINIT = 0U,
     xxx_STATE_INITIALIZED,
+    xxx_STATE_BUS_BUSY,
     // ...
 } xxx_state_t;
 
-// 平台资源绑定
+// 句柄，提供实例化支持
 typedef struct {
-  void *uart;
-  void *gpio_port;
-  uint16_t gpio_pin;
-} xxx_port_t;
-
-// 实例句柄
-typedef struct {
-    const xxx_port_t *port;
-    // void *mutex;  // 若需要库内互斥则启用
+    const void *i2c;  // 移植层资源，核心层仅传递，需应用层与移植层对齐，避免类型错误
+    const void *gpiox;
+    const uint8_t addr;
+#if xxx_USE_RTOS
+    void *mutex;  // RTOS 并发保护
+    void *event;  // RTOS 信号量/事件句柄
+#endif
+    const void *buffer;
     xxx_state_t state;
     // ...
 } xxx_handle_t;
@@ -151,7 +151,13 @@ extern "C" {
  * @return xxx_err_t
  */
 xxx_err_t xxx_init(xxx_handle_t *hxxx);
-
+// 反初始化
+xxx_err_t xxx_deinit(xxx_handle_t *hxxx);
+/**
+ * @brief 中断上下文安全的服务函数，含事件通知
+ * @note 要求轻量、无阻塞，中断上下文安全
+ */
+void xxx_isr(xxx_handle_t *hxxx);
 // ...
 
 #ifdef __cplusplus
@@ -170,7 +176,7 @@ xxx_err_t xxx_init(xxx_handle_t *hxxx);
 /* 实现 xxx.h 中声明的全部 API 函数 */
 
 xxx_err_t xxx_init(xxx_handle_t *hxxx) {
-  if (!hxxx || !hxxx->port) return xxx_ERR_PARAM;
+  if (!hxxx) return xxx_ERR_PARAM;
   if (hxxx->state != xxx_STATE_UNINIT) return xxx_OK;
   xxx_err_t err = xxx_port_init(hxxx);
   if (err) return err;
@@ -179,6 +185,14 @@ xxx_err_t xxx_init(xxx_handle_t *hxxx) {
   return xxx_OK;
 }
 
+void xxx_isr(xxx_handler *hxxx) {
+  if (!hxxx) return;
+  // ...
+#if xxx_USE_RTOS
+  xxx_port_notify(hxxx);
+  // ...
+#endif
+}
 // ...
 ```
 
@@ -211,12 +225,19 @@ extern "C" {
  */
 xxx_err_t xxx_port_init(xxx_handle_t *hxxx);
 /**
- * @note 接口的实现应当充分考虑到诸如移植 RTOS 等情况下的兼容性
- * @param ms 延迟时间
+ * @brief 延时函数
+ * @param ms 延时时间
  */
-void xxx_delay_ms(uint32_t ms);
-
+void xxx_port_delay(uint32_t ms);
+#if xxx_USE_RTOS
+// RTOS 函数，按需实现
+xxx_err_t xxx_port_mutex_lock(xxx_handle_t *hxxx);  // mutex 管理交给 port_init
+void xxx_port_mutex_unlock(xxx_handle_t *hxxx);
+uint32_t xxx_port_enter_critical(void);
+void xxx_port_exit_critical(uint32_t token);
+void xxx_port_notify(xxx_handle_t *hxxx);   // 任务同步
 // ...
+#endif
 
 #ifdef __cplusplus
 }
@@ -224,19 +245,30 @@ void xxx_delay_ms(uint32_t ms);
 ```
 
 ```c
-// xxx_port.c
+// xxx_port_stm32.c
 #include "xxx_port.h"
 #include "xxx_config.h"
 #include "stm32xxx_hal.h"   // 驱动库中唯一可包含 HAL 的地方
 // ...
 
-xxx_err_t xxx_port_init(xxx_handle_t *hxxx) { /* ... */ }   // port 等应当注意将 HAL 错误翻译为库错误码
-void xxx_delay_ms(uint32_t ms) {
-#if xxx_RTOS_ADPT == 1
-  osDelay(ms);  // CMSIS-RTOS
-#else
-  HAL_Delay(ms);
+#if xxx_USE_RTOS
+#include "FreeRTOS.h"
+
+static inline bool scheduler_state(void) {
+  if (__get_IPSR() != 0u) return false;                        // ISR 上下文禁入 osDelay
+  return xTaskGetSchedulerState() == taskSCHEDULER_RUNNING; // 调度器前禁入
+}
 #endif
+
+xxx_err_t xxx_port_init(xxx_handle_t *hxxx) { /* ... */ }   // 注意将 HAL 错误翻译为库错误码
+
+void xxx_port_delay(uint32_t ms) {
+#if xxx_USE_RTOS
+  if (scheduler_state()) {
+    osDelay(ms);
+  } else
+#endif
+  HAL_Delay(ms);
 }
 
 // ...
@@ -283,15 +315,24 @@ void xxx_delay_ms(uint32_t ms) {
 #include "xxx.h"
 #include "uart.h"
 
+/* 资源分配 */
+
+typedef struct {  // 兼容不同平台
+  GPIO_TypeDef *port;
+  uint16_t pin;
+} gpio_t;
+
 UART_HandleTypeDef huartx;
-static const xxx_port_t xxx_port = {
-  .bus = &huartx,
-  .gpio_port = GPIOX,
-  .gpio_pin = GPIO_Pin,
-  // ...
+static const gpio_t xxx_gpio = {
+  .port = GPIOX,
+  .pin = GPIO_PIN_X,
 };
-xxx_handle_t hxxx = {
-  .port = &xxx_port
+
+xxx_handle_t hxxx = {   // 为句柄绑定资源
+  .uart = &huartx,
+  .gpiox = &xxx_gpio,
+  .port = &xxx_port,
+  // ...
 };
 
 int main(void) {
@@ -305,11 +346,9 @@ int main(void) {
 }
 ```
 
-## 附加建议
+## 附加
 
-- API返回值规范：更推荐将错误码作为函数返回值，数据通过指针参数输出
+- API返回值规范：更推荐将错误码作为函数返回值，数据通过指针传递
 - const正确性：所有不修改句柄内容的 API 均采用`const xxx_handle_t *hxxx`
-
-## 灵活调整
-
-本 Skill 只提供基本设计原则，若实际开发中如遇问题，应与用户协商灵活调整
+- 使用CMake进行构建时，将 Core 层编译为静态库，严格控制头文件可见性
+- 本 Skill 只提供基本设计原则，其中代码只作为演示，按需启用。若实际开发中如遇问题，应与用户协商灵活调整
