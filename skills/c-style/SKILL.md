@@ -3,7 +3,7 @@ name: c-style
 description: Always use this rule when editing, writing, or reviewing C code (.c/.h files). Do not invoke it repeatedly if the C code style is already clear or has been previously established.
 metadata: 
   author: axwhizee
-  version: 1.3
+  version: 1.4
 ---
 
 # C Code Style Guide
@@ -28,21 +28,21 @@ metadata:
 
 ## LLVM-based Style Improvements
 
-### No 80-Column Limit [Token Efficiency]
+### No 80-Column Limit [Token-Efficient]
 
-**Do not** wrap lines at 80 columns; code readability is the editor's responsibility. When a line of code is extremely long or explicitly requires wrapping, use continuation indentation rules similar to code blocks, increasing the indentation level.
+**Do not** hard-wrap lines at the 80-column limit. Code readability is the editor's responsibility; avoid excessive whitespace.
 
 ```c
-result = some_long_call(
-  long_param_a,
-  ...
-  long_param_x);  // Code is extremely long and needs wrapping
-
 int main(void){
-  if (condition_a && condition_b && condition_c) {  // Code is not extremely long, do not wrap
+  if (condition_a && condition_b && condition_c) {  // No line wrapping
     ...
   }
 }
+
+result = some_long_call(
+  long_param_a,
+  ...
+  long_param_x);  // When line wrapping is necessary in special cases, increase the indentation level (similar to code blocks; wrap from the opening parenthesis if applicable)
 ```
 
 ### switch: Wrap case Blocks [Style Consistency]
@@ -74,9 +74,9 @@ switch (op) {
 - `/* */` Section comments
   - Used to explain complete logical blocks or as section titles.
   - For multiple lines: `/*` and `*/` must each occupy their own line; every intermediate line starts with ` * ` (asterisk aligned); empty lines inside the block must also contain ` *`.
-  - Always separate block comments from surrounding code with blank lines to visually distinguish them from trailing `//` comments.
 - `/** */` Doxygen comments
   - Must be used for all public function declarations and file headers in `.h` files.
+- No punctuation at the end of the line
 
 ```c
 /* Screen parameter configuration */
@@ -91,22 +91,18 @@ int depth  = 8;     // Color depth
  */
 
 dma_set_base_addr(DMA0, BUFFER_BASE);
-// Required
 dma_enable_irq(DMA0, IRQ_TRANSFER_DONE);
-dma_start_engine(DMA0);
-
-// Process incoming data stream.
-process_stream();
+process_stream();   // Process incoming data stream
 ```
 
 ```c
 /**
  * @file list.h
- * @brief Singly linked list operations.
+ * @brief Singly linked list operations
  */
 
 /**
- * @brief Append a node to the end of the list.
+ * @brief Append a node to the end of the list
  *
  * @param self Pointer to the list instance (must not be NULL)
  * @param data Integer payload (data) stored in the new node

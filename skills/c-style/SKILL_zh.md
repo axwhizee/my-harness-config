@@ -3,7 +3,7 @@ name: c-style
 description: 在编辑、编写或审查 C 代码（.c/.h 文件）时，请始终使用此规则。如果 C 代码风格已经清晰或之前已经确立过，请勿重复调用
 metadata: 
   author: axwhizee
-  version: 1.3
+  version: 1.4
 ---
 
 # C 代码风格指南
@@ -30,19 +30,19 @@ metadata:
 
 ### 无 80 列限制 [Token 高效]
 
-**不要**在 80 列处折行，代码可读性由编辑器负责。当行代码过长或明确需要折行时，使用与代码块相似的续行缩进规则，并增加缩进级别
+**禁止**在 80 列处折行，代码可读性由编辑器负责，避免大片的空格
 
 ```c
-result = some_long_call(
-  long_param_a,
-  ...
-  long_param_x);  // 代码极端长需要折行
-
 int main(void){
-  if (condition_a && condition_b && condition_c) {  // 代码非极端长，不折行
+  if (condition_a && condition_b && condition_c) {  // 不折行
     ...
   }
 }
+
+result = some_long_call(
+  long_param_a,
+  ...
+  long_param_x);  // 特殊情况有折行需要时，增加缩进级别（与代码块相似，有括号则从括号起点折行）
 ```
 
 ### switch：case 代码块包裹 [风格一致性]
@@ -74,9 +74,9 @@ switch (op) {
 - `/* */` 节注释
   - 用于解释完整的逻辑块或作为章节标题
   - 对于多行：`/*` 和 `*/` 各自独占一行；中间的每一行都以 ` * ` 开头（星号对齐）；内部的空行也必须包含 ` *`
-  - 始终用空行将块注释与周围代码隔开，以在视觉上将其与行尾的 `//` 注释区分开来
 - `/** */` Doxygen 注释
   - `.h` 文件中的所有公共函数声明和文件头必须使用
+- 行尾不加标点
 
 ```c
 /* 屏幕参数配置 */
@@ -91,12 +91,8 @@ int depth  = 8;     // 颜色深度
  */
 
 dma_set_base_addr(DMA0, BUFFER_BASE);
-// 必需
 dma_enable_irq(DMA0, IRQ_TRANSFER_DONE);
-dma_start_engine(DMA0);
-
-// 处理传入的数据流。
-process_stream();
+process_stream();   // 处理传入的数据流
 ```
 
 ```c

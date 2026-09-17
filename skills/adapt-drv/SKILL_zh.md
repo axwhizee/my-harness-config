@@ -3,7 +3,7 @@ name: adapt-drv
 description: 面向嵌入式的模块驱动库分层设计规范。当需要为新的外设模块（LCD、传感器等）设计驱动库时使用
 metadata:
   author: Axwhizee
-  version: 8.4
+  version: 8.7
 ---
 
 # 抽象驱动与可适配可移植方法 (Abstraction Driver with Adaptable Portable Technique)
@@ -154,10 +154,10 @@ xxx_err_t xxx_init(xxx_handle_t *hxxx);
 // 反初始化
 xxx_err_t xxx_deinit(xxx_handle_t *hxxx);
 /**
- * @brief 中断上下文安全的服务函数，含事件通知
- * @note 要求轻量、无阻塞，中断上下文安全
+ * @brief 中断上下文安全的服务函数，可包含事件通知，由中断向量 Handler 直接调用
+ * @note 要求轻量、中断上下文安全，不承担标志位清理工作，不含 HAL
  */
-void xxx_isr(xxx_handle_t *hxxx);
+void xxx_urx_isr(xxx_handle_t *hxxx);
 // ...
 
 #ifdef __cplusplus
@@ -185,7 +185,7 @@ xxx_err_t xxx_init(xxx_handle_t *hxxx) {
   return xxx_OK;
 }
 
-void xxx_isr(xxx_handler *hxxx) {
+void xxx_urx_isr(xxx_handler *hxxx) {
   if (!hxxx) return;
   // ...
 #if xxx_USE_RTOS
@@ -238,6 +238,10 @@ void xxx_port_exit_critical(uint32_t token);
 void xxx_port_notify(xxx_handle_t *hxxx);   // 任务同步
 // ...
 #endif
+/**
+ * @brief 涉及 HAL 的中断处理逻辑，由 xxx_urx_isr 调用
+ */
+void xxx_port_urx_isr(void);
 
 #ifdef __cplusplus
 }
@@ -351,4 +355,5 @@ int main(void) {
 - API返回值规范：更推荐将错误码作为函数返回值，数据通过指针传递
 - const正确性：所有不修改句柄内容的 API 均采用`const xxx_handle_t *hxxx`
 - 使用CMake进行构建时，将 Core 层编译为静态库，严格控制头文件可见性
+- 尽可能兼容三种环境：裸机、RTOS下调度器启动前、RTOS下调度器启动后
 - 本 Skill 只提供基本设计原则，其中代码只作为演示，按需启用。若实际开发中如遇问题，应与用户协商灵活调整
